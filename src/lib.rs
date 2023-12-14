@@ -2,14 +2,17 @@
 //!
 //! Please see [README](https://github.com/s1gtrap/wasm-log/blob/main/README.md) for documentation.
 #![deny(missing_docs)]
-use log::{Level, Log, Metadata, Record};
+use env_logger::filter::Builder;
+use env_logger::filter::Filter;
+use log::{Level, LevelFilter, Log, Metadata, Record};
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
 /// Specify what to be logged
 pub struct Config {
-    level: Level,
-    module_prefix: Option<String>,
+    // level: Level,
+    // module_prefix: Option<String>,
+    filter: Filter,
     message_location: MessageLocation,
 }
 
@@ -23,9 +26,10 @@ pub enum MessageLocation {
 
 impl Default for Config {
     fn default() -> Self {
+        let mut builder = Builder::new();
         Self {
-            level: Level::Debug,
-            module_prefix: None,
+            // level: Level::Debug,
+            filter: builder.build(),
             message_location: MessageLocation::SameLine,
         }
     }
@@ -33,22 +37,22 @@ impl Default for Config {
 
 impl Config {
     /// Specify the maximum level you want to log
-    pub fn new(level: Level) -> Self {
+    pub fn new(filter: Filter) -> Self {
         Self {
-            level,
-            module_prefix: None,
+            // level,
+            filter,
             message_location: MessageLocation::SameLine,
         }
     }
 
-    /// Configure the `target` of the logger. If specified, the logger
-    /// only output for `log`s in module that its path starts with
-    /// `module_prefix`. wasm-log only supports single prefix. Only
-    /// the last call to `module_prefix` has effect if you call it multiple times.
-    pub fn module_prefix(mut self, module_prefix: &str) -> Self {
-        self.module_prefix = Some(module_prefix.to_string());
-        self
-    }
+    // /// Configure the `target` of the logger. If specified, the logger
+    // /// only output for `log`s in module that its path starts with
+    // /// `module_prefix`. wasm-log only supports single prefix. Only
+    // /// the last call to `module_prefix` has effect if you call it multiple times.
+    // pub fn module_prefix(mut self, module_prefix: &str) -> Self {
+    //     self.module_prefix = Some(module_prefix.to_string());
+    //     self
+    // }
 
     /// Put the message on a new line, separated from other information
     /// such as level, file path, line number.
@@ -92,11 +96,12 @@ struct WasmLogger {
 
 impl Log for WasmLogger {
     fn enabled(&self, metadata: &Metadata<'_>) -> bool {
-        if let Some(ref prefix) = self.config.module_prefix {
-            metadata.target().starts_with(prefix)
-        } else {
-            true
-        }
+        self.config.filter.enabled(metadata)
+        // if let Some(ref prefix) = self.config.module_prefix {
+        //     metadata.target().starts_with(prefix)
+        // } else {
+        //     true
+        // }
     }
 
     fn log(&self, record: &Record<'_>) {
@@ -176,7 +181,7 @@ pub fn init(config: Config) {
 /// This function will fail if it is called more than once, or if another
 /// library has already initialized a global logger.
 pub fn try_init(config: Config) -> Result<(), log::SetLoggerError> {
-    let max_level = config.level;
+    let max_level = config.filter.filter();
     let wl = WasmLogger {
         config,
         style: Style::new(),
@@ -184,7 +189,7 @@ pub fn try_init(config: Config) -> Result<(), log::SetLoggerError> {
 
     match log::set_boxed_logger(Box::new(wl)) {
         Ok(_) => {
-            log::set_max_level(max_level.to_level_filter());
+            log::set_max_level(max_level);
             Ok(())
         }
         Err(e) => Err(e),
